@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор изображений</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+    <style>
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 500px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f8f9fa;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .toolbar button {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+        .toolbar .form-group {
+            display: none;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+            align-items: center;
+        }
+        .toolbar .form-group.active {
+            display: flex;
+        }
+        .toolbar .form-group input,
+        .toolbar .form-group select {
+            width: auto;
+        }
+        .tooltip-inner {
+            white-space: nowrap;
+        }
+        .form-hint {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container">
+    <h1 class="text-center my-4">Редактор изображений</h1>
+
+    <div class="editor-container">
+        <!-- Превью изображения -->
+        <img src="{{ url_for('static', filename='uploads/' + filename) }}" class="image-preview img-fluid" alt="Изображение" id="preview">
+        
+        <!-- Панель инструментов -->
+        <div class="toolbar mt-3">
+            <!-- Кнопки действий -->
+            <button class="btn btn-outline-primary" data-action="resize" title="Изменить размер">
+                <i class="bi bi-arrows-fullscreen"></i>
+            </button>
+            <button class="btn btn-outline-secondary" data-action="crop" title="Обрезать изображение">
+                <i class="bi bi-crop"></i>
+            </button>
+            <button class="btn btn-outline-primary" data-action="mirror" title="Зеркальное отражение">
+                <i class="bi bi-arrow-left-right"></i>
+            </button>
+            <button class="btn btn-outline-secondary" data-action="rotate" title="Повернуть изображение">
+                <i class="bi bi-arrow-repeat"></i>
+            </button>
+            <button class="btn btn-outline-warning" data-action="brightness_contrast" title="Яркость и контраст">
+                <i class="bi bi-brightness-high"></i>
+            </button>
+            <button class="btn btn-outline-info" data-action="color_balance" title="Цветовой баланс">
+                <i class="bi bi-palette"></i>
+            </button>
+            <button class="btn btn-outline-danger" data-action="noise" title="Добавить шум">
+                <i class="bi bi-droplet"></i>
+            </button>
+            <button class="btn btn-outline-info" data-action="blur" title="Размытие">
+                <i class="bi bi-water"></i>
+            </button>
+            <button class="btn btn-outline-info" data-action="convert_color_space" title="Изменить цветовое пространство">
+                <i class="bi bi-palette"></i>
+            </button>
+            <button class="btn btn-outline-info" data-action="find_object_by_color" title="Найти объект по цвету">
+                <i class="bi bi-eyedropper"></i>
+            </button>
+            <a href="{{ url_for('save_image', filename=filename) }}" class="btn btn-success" title="Сохранить изображение">
+                <i class="bi bi-download"></i>
+            </a>
+
+            <!-- Формы для действий -->
+            <form action="{{ url_for('edit_image', action='resize', filename=filename) }}" method="post" class="form-group" id="resize-form">
+                <input type="number" name="width" placeholder="Ширина (пиксели)" class="form-control" min="1">
+                <input type="number" name="height" placeholder="Высота (пиксели)" class="form-control" min="1">
+                <input type="number" step="0.1" name="scale" placeholder="Масштаб (0.1-10)" class="form-control" min="0.1" max="10">
+                <select name="interpolation" class="form-select">
+                    <option value="auto">Авто</option>
+                    <option value="nearest">Ближайший сосед</option>
+                    <option value="bilinear">Билинейная</option>
+                    <option value="bicubic">Бикубическая</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Ширина и высота: положительные числа. Масштаб: от 0.1 до 10.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='crop', filename=filename) }}" method="post" class="form-group" id="crop-form">
+                <input type="number" name="x" placeholder="X (начало)" class="form-control" min="0">
+                <input type="number" name="y" placeholder="Y (начало)" class="form-control" min="0">
+                <input type="number" name="w" placeholder="Ширина" class="form-control" min="1">
+                <input type="number" name="h" placeholder="Высота" class="form-control" min="1">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">X и Y: от 0 до размеров изображения. Ширина и высота: положительные числа.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='mirror', filename=filename) }}" method="post" class="form-group" id="mirror-form">
+                <select name="direction" class="form-select">
+                    <option value="horizontal">Горизонтально</option>
+                    <option value="vertical">Вертикально</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Выберите направление отражения.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='rotate', filename=filename) }}" method="post" class="form-group" id="rotate-form">
+                <input type="number" name="angle" placeholder="Угол (градусы)" class="form-control" min="-360" max="360">
+                <input type="number" name="center_x" placeholder="Центр X" class="form-control" min="0">
+                <input type="number" name="center_y" placeholder="Центр Y" class="form-control" min="0">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Угол: от -360 до 360 градусов. Центр: координаты внутри изображения.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='brightness_contrast', filename=filename) }}" method="post" class="form-group" id="brightness_contrast-form">
+                <input type="number" name="brightness" placeholder="Яркость (-100 до 100)" class="form-control" min="-100" max="100">
+                <input type="number" name="contrast" placeholder="Контраст (0.1-3.0)" class="form-control" min="0.1" max="3.0" step="0.1">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Яркость: от -100 до 100. Контраст: от 0.1 до 3.0.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='color_balance', filename=filename) }}" method="post" class="form-group" id="color_balance-form">
+                <input type="number" name="r" placeholder="R (-100 до 100)" class="form-control" min="-100" max="100">
+                <input type="number" name="g" placeholder="G (-100 до 100)" class="form-control" min="-100" max="100">
+                <input type="number" name="b" placeholder="B (-100 до 100)" class="form-control" min="-100" max="100">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Значения R, G, B: от -100 до 100.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='noise', filename=filename) }}" method="post" class="form-group" id="noise-form">
+                <select name="type" class="form-select">
+                    <option value="gaussian">Гауссов</option>
+                    <option value="salt_pepper">Соль-перец</option>
+                </select>
+                <input type="number" name="sigma" placeholder="Сигма (1-100)" class="form-control" min="1" max="100">
+                <input type="number" step="0.01" name="prob" placeholder="Вероятность (0.01-0.5)" class="form-control" min="0.01" max="0.5">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Сигма: от 1 до 100. Вероятность: от 0.01 до 0.5.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='blur', filename=filename) }}" method="post" class="form-group" id="blur-form">
+                <select name="type" class="form-select">
+                    <option value="average">Среднее</option>
+                    <option value="gaussian">Гауссово</option>
+                    <option value="median">Медианное</option>
+                </select>
+                <input type="number" name="size" placeholder="Размер ядра (нечетное)" class="form-control" min="1" step="2">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Размер ядра: нечетное число (например, 3, 5, 7).</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='convert_color_space', filename=filename) }}" method="post" class="form-group" id="convert_color_space-form">
+                <select name="color_space" class="form-select">
+                    <option value="rgb">RGB</option>
+                    <option value="hsv">HSV</option>
+                    <option value="grayscale">Оттенки серого</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Выберите цветовое пространство для преобразования.</div>
+            </form>
+
+            <form action="{{ url_for('edit_image', action='find_object_by_color', filename=filename) }}" method="post" class="form-group" id="find_object_by_color-form">
+                <div>
+                    <label for="color-space">Цветовое пространство:</label>
+                    <select name="color_space" id="color-space" class="form-select">
+                        <option value="rgb">RGB</option>
+                        <option value="hsv">HSV</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="color-input">Цвет:</label>
+                    <input type="text" name="color" id="color-input" placeholder="R,G,B или H,S,V" class="form-control" required>
+                </div>
+                <div>
+                    <label for="tolerance">Допуск:</label>
+                    <input type="number" name="tolerance" id="tolerance" placeholder="Допуск (0-100)" class="form-control" min="0" max="100" required>
+                </div>
+                <div>
+                    <label for="action-type">Действие:</label>
+                    <select name="action_type" id="action-type" class="form-select">
+                        <option value="bounding_box">Ограничивающая рамка</option>
+                        <option value="crop">Обрезать изображение</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Введите цвет в формате RGB (например, 255,0,0) или HSV (например, 0,100,100).</div>
+            </form>
+        </div>
+
+        <!-- Кнопка "Назад" -->
+        <a href="{{ url_for('index') }}" class="btn btn-outline-danger mt-3" id="back-button">Назад</a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Показ/скрытие форм при нажатии на кнопки
+    document.querySelectorAll('.toolbar button[data-action]').forEach(button => {
+        button.addEventListener('click', () => {
+            const action = button.getAttribute('data-action');
+            const form = document.getElementById(`${action}-form`);
+            
+            // Скрываем все формы
+            document.querySelectorAll('.toolbar .form-group').forEach(f => f.classList.remove('active'));
+            
+            // Показываем нужную форму
+            if (form) {
+                form.classList.add('active');
+            }
+        });
+    });
+
+    // Удаление файла при нажатии на кнопку "Назад"
+    document.getElementById('back-button').addEventListener('click', function(event) {
+        event.preventDefault(); // Отменяем стандартное поведение ссылки
+        fetch(`/delete_file/{{ filename }}`) // Вызываем эндпоинт для удаления файла
+            .then(response => {
+                if (response.ok) {
+                    window.location.href = "{{ url_for('index') }}"; // Переходим на главную страницу
+                } else {
+                    alert("Ошибка при удалении файла");
+                }
+            })
+            .catch(error => {
+                console.error("Ошибка:", error);
+                alert("Ошибка при удалении файла");
+            });
+    });
+
+    // Инициализация подсказок
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+</script>
+</body>
+</html>
