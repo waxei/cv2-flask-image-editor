@@ -57,6 +57,9 @@
             color: #666;
             margin-top: 5px;
         }
+        .toolbar button[data-action="watershed_segmentation"] {
+            order: 12; /* Для правильного позиционирования */
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -101,6 +104,21 @@
             <button class="btn btn-outline-info" data-action="find_object_by_color" title="Найти объект по цвету">
                 <i class="bi bi-eyedropper"></i>
             </button>
+            <!-- Бинаризация -->
+            <button class="btn btn-outline-dark" data-action="binarize" title="Бинаризация">
+                <i class="bi bi-contrast"></i>
+            </button>
+
+            <!-- Оператор Собеля -->
+            <button class="btn btn-outline-secondary" data-action="sobel_edges" title="Границы Собеля">
+                <i class="bi bi-border-all"></i>
+            </button>
+
+            <!-- Оператор Кэнни -->
+            <button class="btn btn-outline-dark" data-action="canny_edges" title="Границы Кэнни">
+                <i class="bi bi-pencil"></i>
+            </button>
+            
             <a href="{{ url_for('save_image', filename=filename) }}" class="btn btn-success" title="Сохранить изображение">
                 <i class="bi bi-download"></i>
             </a>
@@ -219,7 +237,53 @@
                 <button type="submit" class="btn btn-primary">Применить</button>
                 <div class="form-hint">Введите цвет в формате RGB (например, 255,0,0) или HSV (например, 0,100,100).</div>
             </form>
-        </div>
+            <!-- Бинаризация -->
+            <form action="{{ url_for('edit_image', action='binarize', filename=filename) }}" method="post" class="form-group" id="binarize-form">
+                <select name="method" class="form-select">
+                    <option value="global">Глобальная</option>
+                    <option value="otsu">Otsu</option>
+                    <option value="adaptive">Адаптивная</option>
+                </select>
+            
+                <!-- Поле для глобального метода -->
+                <div data-show-for="global" style="display: none;">
+                    <input type="number" name="threshold" placeholder="Порог (127)" 
+                           class="form-control" min="0" max="255">
+                </div>
+            
+                <!-- Поля для адаптивного метода -->
+                <div data-show-for="adaptive" style="display: none;">
+                    <input type="number" name="block_size" placeholder="Размер блока (11)" 
+                           class="form-control" min="3" step="2">
+                    <input type="number" name="C" placeholder="Константа C (2)" 
+                           class="form-control">
+                </div>
+            
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">
+                    Для Otsu параметры не требуются. Для адаптивного метода: размер блока - нечетное число ≥3.
+                </div>
+            </form>
+
+            <!-- Оператор Собеля -->
+            <form action="{{ url_for('edit_image', action='sobel_edges', filename=filename) }}" method="post" class="form-group" id="sobel_edges-form">
+                <select name="direction" class="form-select">
+                    <option value="combined">Все границы</option>
+                    <option value="x">Горизонтальные</option>
+                    <option value="y">Вертикальные</option>
+                </select>
+                <input type="number" name="ksize" placeholder="Размер ядра (3)" class="form-control" min="1" step="2">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Размер ядра: 1, 3, 5 или 7.</div>
+            </form>
+
+            <!-- Оператор Кэнни -->
+            <form action="{{ url_for('edit_image', action='canny_edges', filename=filename) }}" method="post" class="form-group" id="canny_edges-form">
+                <input type="number" name="low_thresh" placeholder="Нижний порог (100)" class="form-control" min="0" max="255">
+                <input type="number" name="high_thresh" placeholder="Верхний порог (200)" class="form-control" min="0" max="255">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Рекомендуется: нижний порог ≤ верхнему.</div>
+            </form>
 
         <!-- Кнопка "Назад" -->
         <a href="{{ url_for('index') }}" class="btn btn-outline-danger mt-3" id="back-button">Назад</a>
@@ -265,6 +329,29 @@
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
     tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+    document.querySelector('#binarize-form select[name="method"]').addEventListener('change', function() {
+        const method = this.value;
+        const form = this.closest('form');
+        
+        // Скрываем все дополнительные поля
+        form.querySelectorAll('[data-show-for]').forEach(field => {
+            field.style.display = 'none';
+        });
+
+        // Показываем нужные поля
+        if (method === 'global') {
+            form.querySelector('[data-show-for="global"]').style.display = 'block';
+        } else if (method === 'adaptive') {
+            form.querySelector('[data-show-for="adaptive"]').style.display = 'block';
+        }
+    });
+
+    // Инициализация при загрузке страницы
+    document.addEventListener('DOMContentLoaded', () => {
+        const binarizeMethod = document.querySelector('#binarize-form select[name="method"]');
+        if (binarizeMethod) binarizeMethod.dispatchEvent(new Event('change'));
     });
 </script>
 </body>

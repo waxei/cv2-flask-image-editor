@@ -231,8 +231,54 @@ def edit_image(action, filename):
                 img = cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
             elif blur_type == "median":
                 img = cv2.medianBlur(img, kernel_size)
+        elif action == "binarize":
+            method = request.form.get("method", "global")
+            threshold = int(request.form.get("threshold") or 127)
+            block_size = int(request.form.get("block_size") or 11)
+            C = int(request.form.get("C") or 2)
 
-        # Сохранение изменений
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            if method == "global":
+                _, img = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+            elif method == "otsu":
+                _, img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            elif method == "adaptive":
+                img = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                        cv2.THRESH_BINARY, block_size, C)
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+
+        elif action == "sobel_edges":
+            
+            direction = request.form.get("direction", "combined")
+            ksize = int(request.form.get("ksize", 3))
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            if direction == "x":
+                edges = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=ksize)
+            elif direction == "y":
+                edges = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=ksize)
+            else:
+                sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=ksize)
+                sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=ksize)
+                edges = np.sqrt(sobelx**2 + sobely**2)
+            
+            edges = cv2.normalize(edges, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+            img = edges
+            # img = cv2.addWeighted(img, 0.8, edges, 0.2, 0)  
+
+        elif action == "canny_edges":
+            
+            low_thresh = int(request.form.get("low_thresh", 100))
+            high_thresh = int(request.form.get("high_thresh", 200))
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(gray, low_thresh, high_thresh)
+            edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+            img = edges
+            # img = cv2.addWeighted(img, 0.8, edges, 0.2, 0) 
+
+        
         cv2.imwrite(filepath, img)
 
     except Exception as e:
