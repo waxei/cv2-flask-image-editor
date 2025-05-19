@@ -6,6 +6,7 @@
     <title>Редактор изображений</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
     <style>
         .editor-container {
             display: flex;
@@ -19,6 +20,8 @@
             border: 1px solid #ddd;
             padding: 10px;
             background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .toolbar {
             display: flex;
@@ -26,6 +29,10 @@
             justify-content: center;
             gap: 10px;
             margin-top: 15px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .toolbar button {
             width: 50px;
@@ -34,6 +41,12 @@
             align-items: center;
             justify-content: center;
             font-size: 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        .toolbar button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .toolbar .form-group {
             display: none;
@@ -41,28 +54,186 @@
             gap: 10px;
             margin-top: 10px;
             align-items: center;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
         }
         .toolbar .form-group.active {
             display: flex;
+            animation: fadeIn 0.3s ease;
         }
         .toolbar .form-group input,
         .toolbar .form-group select {
             width: auto;
+            border-radius: 6px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            transition: all 0.3s ease;
         }
-        .tooltip-inner {
+        .toolbar .form-group input:focus,
+        .toolbar .form-group select:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+        }
+        .toolbar .form-group button {
+            padding: 8px 20px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            min-width: 120px;
             white-space: nowrap;
+            text-align: center;
+        }
+        .toolbar .form-group button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .form-hint {
             font-size: 0.9rem;
             color: #666;
             margin-top: 5px;
+            width: 100%;
+            text-align: center;
+            padding: 5px;
+            background-color: #f1f1f1;
+            border-radius: 4px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tooltip-inner {
+            white-space: nowrap;
+            background-color: #333;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .btn-outline-info {
+            color: #0dcaf0;
+            border-color: #0dcaf0;
+        }
+        .btn-outline-info:hover {
+            background-color: #0dcaf0;
+            color: white;
+        }
+        .btn-primary {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .btn-primary:hover {
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
         }
         .toolbar button[data-action="watershed_segmentation"] {
             order: 12; /* Для правильного позиционирования */
         }
+
+        /* Стили для индикатора загрузки */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Стили для раздела кластеризации */
+        .clustering-methods {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+
+        .clustering-method {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .clustering-method h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #0d6efd;
+            text-align: center;
+        }
+
+        .clustering-method .form-row {
+            margin-bottom: 10px;
+        }
+
+        .clustering-method label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .clustering-method input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .clustering-method .apply-btn {
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        #clustering-method {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body class="bg-light">
+
+<!-- Добавляем оверлей загрузки -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Обработка изображения...</div>
+    </div>
+</div>
 
 <div class="container">
     <h1 class="text-center my-4">Редактор изображений</h1>
@@ -108,15 +279,27 @@
             <button class="btn btn-outline-dark" data-action="binarize" title="Бинаризация">
                 <i class="bi bi-contrast"></i>
             </button>
-
+            <!-- Кластеризация -->
+            <button class="btn btn-outline-info" data-action="clustering" title="Методы кластеризации">
+                <i class="bi bi-diagram-3"></i>
+            </button>
             <!-- Оператор Собеля -->
             <button class="btn btn-outline-secondary" data-action="sobel_edges" title="Границы Собеля">
                 <i class="bi bi-border-all"></i>
             </button>
-
             <!-- Оператор Кэнни -->
             <button class="btn btn-outline-dark" data-action="canny_edges" title="Границы Кэнни">
                 <i class="bi bi-pencil"></i>
+            </button>
+            
+            <!-- Кнопка для сегментации методом водораздела -->
+            <button class="btn btn-outline-info" data-action="watershed" title="Сегментация водоразделом">
+                <i class="bi bi-water"></i>
+            </button>
+            
+            <!-- Кнопка для активного контура -->
+            <button class="btn btn-outline-info" data-action="active_contour" title="Активный контур">
+                <i class="bi bi-bounding-box"></i>
             </button>
             
             <a href="{{ url_for('save_image', filename=filename) }}" class="btn btn-success" title="Сохранить изображение">
@@ -237,33 +420,91 @@
                 <button type="submit" class="btn btn-primary">Применить</button>
                 <div class="form-hint">Введите цвет в формате RGB (например, 255,0,0) или HSV (например, 0,100,100).</div>
             </form>
-            <!-- Бинаризация -->
+            <!-- Форма для бинаризации -->
             <form action="{{ url_for('edit_image', action='binarize', filename=filename) }}" method="post" class="form-group" id="binarize-form">
-                <select name="method" class="form-select">
-                    <option value="global">Глобальная</option>
-                    <option value="otsu">Otsu</option>
-                    <option value="adaptive">Адаптивная</option>
-                </select>
-            
-                <!-- Поле для глобального метода -->
-                <div data-show-for="global" style="display: none;">
-                    <input type="number" name="threshold" placeholder="Порог (127)" 
-                           class="form-control" min="0" max="255">
+                <h3>Бинаризация</h3>
+                <div class="form-row">
+                    <label for="binarize-method">Метод:</label>
+                    <select id="binarize-method" name="method">
+                        <option value="global">Глобальный порог</option>
+                        <option value="otsu">Метод Оцу</option>
+                        <option value="adaptive">Адаптивный порог</option>
+                    </select>
                 </div>
-            
-                <!-- Поля для адаптивного метода -->
-                <div data-show-for="adaptive" style="display: none;">
-                    <input type="number" name="block_size" placeholder="Размер блока (11)" 
-                           class="form-control" min="3" step="2">
-                    <input type="number" name="C" placeholder="Константа C (2)" 
-                           class="form-control">
+                <div class="form-row">
+                    <label for="binarize-threshold">Порог:</label>
+                    <input type="number" id="binarize-threshold" name="threshold" value="127" min="0" max="255">
                 </div>
-            
-                <button type="submit" class="btn btn-primary">Применить</button>
-                <div class="form-hint">
-                    Для Otsu параметры не требуются. Для адаптивного метода: размер блока - нечетное число ≥3.
+                <div class="form-row">
+                    <label for="binarize-block-size">Размер блока (адаптивный):</label>
+                    <input type="number" id="binarize-block-size" name="block_size" value="11" min="3" step="2">
                 </div>
+                <div class="form-row">
+                    <label for="binarize-c">Константа C (адаптивный):</label>
+                    <input type="number" id="binarize-c" name="C" value="2" min="-100" max="100">
+                </div>
+                <button type="submit" class="apply-btn">Применить</button>
             </form>
+
+            <!-- Форма для кластеризации -->
+            <div class="form-group" id="clustering-form" style="display: none;">
+                <h3>Методы кластеризации</h3>
+                <div class="form-row">
+                    <label for="clustering-method">Выберите метод:</label>
+                    <select id="clustering-method" class="form-select">
+                        <option value="">Выберите метод кластеризации</option>
+                        <option value="mean_shift">Mean Shift</option>
+                        <option value="kmeans">K-means</option>
+                        <option value="dbscan">DBSCAN</option>
+                    </select>
+                </div>
+
+                <!-- Mean Shift сегментация -->
+                <form action="{{ url_for('edit_image', action='mean_shift', filename=filename) }}" method="POST" class="clustering-method" id="mean_shift-form" style="display: none;">
+                    <h4>Mean Shift</h4>
+                    <div class="form-row">
+                        <label for="mean-shift-spatial">Пространственный радиус:</label>
+                        <input type="number" id="mean-shift-spatial" name="spatial_radius" value="10" min="1" max="20">
+                    </div>
+                    <div class="form-row">
+                        <label for="mean-shift-color">Цветовой радиус:</label>
+                        <input type="number" id="mean-shift-color" name="color_radius" value="10" min="1" max="20">
+                    </div>
+                    <div class="form-row">
+                        <label for="mean-shift-level">Максимальный уровень:</label>
+                        <input type="number" id="mean-shift-level" name="max_level" value="3" min="1" max="4">
+                    </div>
+                    <button type="submit" class="apply-btn">Применить</button>
+                </form>
+
+                <!-- K-means сегментация -->
+                <form action="{{ url_for('edit_image', action='kmeans', filename=filename) }}" method="POST" class="clustering-method" id="kmeans-form" style="display: none;">
+                    <h4>K-means</h4>
+                    <div class="form-row">
+                        <label for="kmeans-k">Количество кластеров:</label>
+                        <input type="number" id="kmeans-k" name="k" value="5" min="2" max="8">
+                    </div>
+                    <div class="form-row">
+                        <label for="kmeans-attempts">Количество попыток:</label>
+                        <input type="number" id="kmeans-attempts" name="attempts" value="5" min="1" max="10">
+                    </div>
+                    <button type="submit" class="apply-btn">Применить</button>
+                </form>
+
+                <!-- DBSCAN сегментация -->
+                <form action="{{ url_for('edit_image', action='dbscan', filename=filename) }}" method="POST" class="clustering-method" id="dbscan-form" style="display: none;">
+                    <h4>DBSCAN</h4>
+                    <div class="form-row">
+                        <label for="dbscan-eps">Радиус поиска:</label>
+                        <input type="number" step="0.1" id="dbscan-eps" name="eps" value="5.0" min="0.1" max="10.0">
+                    </div>
+                    <div class="form-row">
+                        <label for="dbscan-min">Минимум точек:</label>
+                        <input type="number" id="dbscan-min" name="min_samples" value="10" min="5" max="20">
+                    </div>
+                    <button type="submit" class="apply-btn">Применить</button>
+                </form>
+            </div>
 
             <!-- Оператор Собеля -->
             <form action="{{ url_for('edit_image', action='sobel_edges', filename=filename) }}" method="post" class="form-group" id="sobel_edges-form">
@@ -283,6 +524,23 @@
                 <input type="number" name="high_thresh" placeholder="Верхний порог (200)" class="form-control" min="0" max="255">
                 <button type="submit" class="btn btn-primary">Применить</button>
                 <div class="form-hint">Рекомендуется: нижний порог ≤ верхнему.</div>
+            </form>
+
+            <!-- Форма для сегментации методом водораздела -->
+            <form action="{{ url_for('edit_image', action='watershed', filename=filename) }}" method="post" class="form-group" id="watershed-form">
+                <input type="number" name="blur_size" placeholder="Размер размытия (нечетное)" class="form-control" min="1" step="2" value="5">
+                <input type="number" name="min_distance" placeholder="Минимальное расстояние" class="form-control" min="1" value="10">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Размер размытия: нечетное число (например, 3, 5, 7). Минимальное расстояние: положительное число.</div>
+            </form>
+
+            <!-- Форма для активного контура -->
+            <form action="{{ url_for('edit_image', action='active_contour', filename=filename) }}" method="post" class="form-group" id="active_contour-form">
+                <input type="number" step="0.001" name="alpha" placeholder="Альфа (0.015)" class="form-control" min="0.001" value="0.015">
+                <input type="number" step="0.1" name="beta" placeholder="Бета (10.0)" class="form-control" min="0.1" value="10.0">
+                <input type="number" step="0.001" name="gamma" placeholder="Гамма (0.001)" class="form-control" min="0.001" value="0.001">
+                <button type="submit" class="btn btn-primary">Применить</button>
+                <div class="form-hint">Альфа: вес длины контура. Бета: вес гладкости. Гамма: вес изображения.</div>
             </form>
 
         <!-- Кнопка "Назад" -->

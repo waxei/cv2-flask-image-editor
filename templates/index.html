@@ -5,17 +5,79 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Редактор изображений</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .upload-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 30px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .upload-title {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .file-input {
+            padding: 10px;
+            border: 2px dashed #ddd;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .file-input:hover {
+            border-color: #0d6efd;
+        }
+        .submit-btn {
+            padding: 10px 20px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .submit-btn:hover {
+            background-color: #0b5ed7;
+        }
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+    </style>
 </head>
 <body>
-
-<div class="container mt-5">
-    <h1 class="text-center">Редактор изображений</h1>
-    <form action="{{ url_for('upload_image') }}" method="post" enctype="multipart/form-data" class="text-center">
-        <input type="file" name="file" class="form-control mb-3">
-        <button type="submit" class="btn btn-primary">Загрузить</button>
-    </form>
-</div>
-
+    <div class="container">
+        <div class="upload-container">
+            <h1 class="upload-title">Редактор изображений</h1>
+            
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for message in messages %}
+                            <div class="alert alert-info">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            <form action="{{ url_for('upload_image') }}" method="post" enctype="multipart/form-data" class="upload-form">
+                <div class="file-input">
+                    <input type="file" name="file" accept=".jpg,.jpeg,.png,.tiff" required>
+                </div>
+                <button type="submit" class="submit-btn">Загрузить</button>
+            </form>
+        </div>
+    </div>
 </body>
-</html>
+</html> 

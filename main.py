@@ -4,6 +4,21 @@ import cv2
 import numpy as np
 import uuid
 from datetime import datetime
+import logging
+import sys
+from image_processor import ImageProcessor
+import threading
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('image_processing.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"  # Для отображения сообщений flash
@@ -14,134 +29,124 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'tiff'}
 
+# Создаем экземпляр ImageProcessor
+image_processor = ImageProcessor(max_workers=4)
+
+# Кэш для изображений
+_image_cache = {}
+_cache_lock = threading.Lock()
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def get_cached_image(filepath):
+    """Получение изображения из кэша или загрузка из файла"""
+    with _cache_lock:
+        if filepath in _image_cache:
+            return _image_cache[filepath].copy()
+        
+        img = cv2.imread(filepath)
+        if img is not None:
+            _image_cache[filepath] = img.copy()
+        return img
+
+def save_image_to_cache(filepath, img):
+    """Сохранение изображения в кэш"""
+    with _cache_lock:
+        _image_cache[filepath] = img.copy()
+
 @app.errorhandler(Exception)
 def handle_error(e):
+    logger.error(f"Произошла ошибка: {str(e)}", exc_info=True)
     flash(f"Произошла ошибка: {str(e)}")
     return redirect(url_for('index'))
 
 @app.route('/')
 def index():
+    logger.info("Открыта главная страница")
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_image():
+    logger.info("Начало загрузки изображения")
     if 'file' not in request.files:
+        logger.warning("Файл не найден в запросе")
         flash("Файл не найден!")
         return redirect(request.url)
 
     file = request.files['file']
     if file.filename == '':
+        logger.warning("Имя файла пустое")
         flash("Файл не выбран!")
         return redirect(request.url)
 
     if not allowed_file(file.filename):
+        logger.warning(f"Недопустимый формат файла: {file.filename}")
         flash("Недопустимый формат файла!")
         return redirect(request.url)
 
     original_filename = file.filename
-    file_extension = original_filename.rsplit('.', 1)[1].lower()  # Получаем расширение файла
+    file_extension = original_filename.rsplit('.', 1)[1].lower()
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     unique_filename = f"{timestamp}_{uuid.uuid4().hex}.{file_extension}"
 
-    # Сохранение файла с уникальным именем
+    logger.info(f"Загрузка файла: {original_filename} -> {unique_filename}")
+    
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
     file.save(filepath)
+    
+    # Загружаем изображение в кэш
+    img = cv2.imread(filepath)
+    if img is not None:
+        save_image_to_cache(filepath, img)
+    
+    logger.info(f"Файл успешно сохранен: {filepath}")
 
     return redirect(url_for('editor', filename=unique_filename))
 
 @app.route('/edit/<action>/<filename>', methods=['POST'])
 def edit_image(action, filename):
+    logger.info(f"Начало обработки изображения: {action} для файла {filename}")
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
     if not os.path.exists(filepath):
+        logger.error(f"Файл не найден: {filepath}")
         flash("Файл не найден!")
         return redirect(url_for('index'))
 
-    img = cv2.imread(filepath)
+    # Получаем изображение из кэша
+    img = get_cached_image(filepath)
     if img is None:
+        logger.error(f"Ошибка чтения изображения: {filepath}")
         flash("Ошибка чтения изображения!")
         return redirect(url_for('index'))
 
     try:
+        # Обработка изображения в зависимости от действия
         if action == "resize":
-            # Изменение размера
             scale = request.form.get("scale")
             width = request.form.get("width")
             height = request.form.get("height")
             interpolation = request.form.get("interpolation", "auto")
             
-            original_h, original_w = img.shape[:2]
-            
-            if scale:
-                scale_factor = float(scale)
-                new_w = int(original_w * scale_factor)
-                new_h = int(original_h * scale_factor)
-            else:
-                new_w = int(width) if width else original_w
-                new_h = int(height) if height else original_h
+            img = image_processor.resize_image(img, scale, width, height, interpolation)
+            logger.info("Изменение размера выполнено успешно")
 
-            if interpolation == "auto":
-                if new_w > original_w or new_h > original_h:
-                    interp = cv2.INTER_CUBIC
-                else:
-                    interp = cv2.INTER_AREA
-            else:
-                interp_map = {
-                    "nearest": cv2.INTER_NEAREST,
-                    "bilinear": cv2.INTER_LINEAR,
-                    "bicubic": cv2.INTER_CUBIC
-                }
-                interp = interp_map.get(interpolation, cv2.INTER_LINEAR)
-
-            img = cv2.resize(img, (new_w, new_h), interpolation=interp)
         elif action == "convert_color_space":
             color_space = request.form.get("color_space")
-            if color_space == "hsv":
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-            elif color_space == "grayscale":
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            elif color_space == "rgb":
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            else:
-                flash("Недопустимое цветовое пространство!")
-                return redirect(url_for('editor', filename=filename))
+            img = image_processor.convert_color_space(img, color_space)
+            logger.info(f"Конвертация в цветовое пространство {color_space} выполнена успешно")
         
         elif action == "find_object_by_color":
             color_space = request.form.get("color_space")
-            color = list(map(int, request.form.get("color").split(',')))  # Получаем цвет в формате "R,G,B" или "H,S,V"
-            tolerance = int(request.form.get("tolerance", 10))  # Допуск для поиска цвета
-            action_type = request.form.get("action_type")  # "bounding_box" или "crop"
-
-            if color_space == "hsv":
-                img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-                lower_bound = np.array([max(0, color[0] - tolerance), max(0, color[1] - tolerance), max(0, color[2] - tolerance)])
-                upper_bound = np.array([min(179, color[0] + tolerance), min(255, color[1] + tolerance), min(255, color[2] + tolerance)])
-                mask = cv2.inRange(img_hsv, lower_bound, upper_bound)
-            else:  # RGB
-                lower_bound = np.array([max(0, color[0] - tolerance), max(0, color[1] - tolerance), max(0, color[2] - tolerance)])
-                upper_bound = np.array([min(255, color[0] + tolerance), min(255, color[1] + tolerance), min(255, color[2] + tolerance)])
-                mask = cv2.inRange(img, lower_bound, upper_bound)
-
-            # Нахождение контуров объекта
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if contours:
-                x, y, w, h = cv2.boundingRect(contours[0])  # Координаты ограничивающей рамки
-
-                if action_type == "bounding_box":
-                    # Рисуем ограничивающую рамку
-                    cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                elif action_type == "crop":
-                    # Обрезаем изображение по координатам объекта
-                    img = img[y:y + h, x:x + w]
-            else:
-                flash("Объект с указанным цветом не найден!")
-                return redirect(url_for('editor', filename=filename))
+            color = list(map(int, request.form.get("color").split(',')))
+            tolerance = int(request.form.get("tolerance", 10))
+            action_type = request.form.get("action_type")
+            
+            img = image_processor.find_object_by_color(img, color_space, color, tolerance, action_type)
+            logger.info("Поиск объекта по цвету выполнен успешно")
 
         elif action == "crop":
-            # Вырезка фрагмента
             if 'mask' in request.files:
                 mask_file = request.files['mask']
                 if mask_file.filename != '':
@@ -150,142 +155,143 @@ def edit_image(action, filename):
                     mask = cv2.imread(mask_path, 0)
                     os.remove(mask_path)
                     
-                    if mask.shape != img.shape[:2]:
-                        flash("Маска должна соответствовать размеру изображения!")
-                        return redirect(url_for('editor', filename=filename))
-                    
-                    img = cv2.bitwise_and(img, img, mask=mask)
+                    img = image_processor.crop_with_mask(img, mask)
             else:
                 x = int(request.form.get("x", 0))
                 y = int(request.form.get("y", 0))
                 w = int(request.form.get("w", img.shape[1]))
                 h = int(request.form.get("h", img.shape[0]))
                 
-                if x + w > img.shape[1] or y + h > img.shape[0]:
-                    flash("Некорректные координаты обрезки!")
-                    return redirect(url_for('editor', filename=filename))
-
-                img = img[y:y+h, x:x+w]
+                img = image_processor.crop_image(img, x, y, w, h)
+            logger.info("Обрезка изображения выполнена успешно")
 
         elif action == "mirror":
-            # Зеркальное отражение
             direction = request.form.get("direction")
-            flip_code = 1 if direction == "horizontal" else 0 if direction == "vertical" else -1
-            img = cv2.flip(img, flip_code)
+            img = image_processor.mirror_image(img, direction)
+            logger.info(f"Зеркальное отражение по направлению {direction} выполнено успешно")
 
         elif action == "rotate":
-            # Поворот изображения
             angle = float(request.form.get("angle", 0))
             center_x = request.form.get("center_x")
             center_y = request.form.get("center_y")
             
-            h, w = img.shape[:2]
-            center = (w//2, h//2) if not (center_x and center_y) else (int(center_x), int(center_y))
+            center = None
+            if center_x and center_y:
+                center = (int(center_x), int(center_y))
             
-            M = cv2.getRotationMatrix2D(center, angle, 1.0)
-            img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR)
+            img = image_processor.rotate_image(img, angle, center)
+            logger.info(f"Поворот на угол {angle} выполнен успешно")
 
         elif action == "brightness_contrast":
-            # Яркость и контраст
             brightness = int(request.form.get("brightness", 0))
             contrast = float(request.form.get("contrast", 1.0))
-            img = cv2.convertScaleAbs(img, alpha=contrast, beta=brightness)
+            img = image_processor.apply_brightness_contrast(img, brightness, contrast)
+            logger.info("Корректировка яркости и контраста выполнена успешно")
 
         elif action == "color_balance":
-            # Цветовой баланс
             b = float(request.form.get("b", 1.0))
             g = float(request.form.get("g", 1.0))
             r = float(request.form.get("r", 1.0))
             
-            img = img.astype(np.float32)
-            img[:,:,0] = np.clip(img[:,:,0] * b, 0, 255)
-            img[:,:,1] = np.clip(img[:,:,1] * g, 0, 255)
-            img[:,:,2] = np.clip(img[:,:,2] * r, 0, 255)
-            img = img.astype(np.uint8)
+            img = image_processor.apply_color_balance(img, b, g, r)
+            logger.info("Корректировка цветового баланса выполнена успешно")
 
         elif action == "noise":
-            # Добавление шума
             noise_type = request.form.get("type")
+            params = {}
+            
             if noise_type == "gaussian":
-                sigma = int(request.form.get("sigma", 25))
-                noise = np.random.normal(0, sigma, img.shape).astype(np.uint8)
-                img = cv2.add(img, noise)
+                params["sigma"] = int(request.form.get("sigma", 25))
             elif noise_type == "salt_pepper":
-                prob = float(request.form.get("prob", 0.02))
-                noise_img = img.copy()
-                black = np.array([0, 0, 0], dtype=np.uint8)
-                white = np.array([255, 255, 255], dtype=np.uint8)
-                probs = np.random.random(img.shape[:2])
-                noise_img[probs < prob] = black
-                noise_img[probs > 1 - prob] = white
-                img = noise_img
+                params["prob"] = float(request.form.get("prob", 0.02))
+            
+            img = image_processor.add_noise(img, noise_type, **params)
+            logger.info(f"Добавление шума типа {noise_type} выполнено успешно")
 
         elif action == "blur":
-            # Размытие
             kernel_size = int(request.form.get("size", 5))
             blur_type = request.form.get("type")
-            
-            if blur_type == "average":
-                img = cv2.blur(img, (kernel_size, kernel_size))
-            elif blur_type == "gaussian":
-                img = cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
-            elif blur_type == "median":
-                img = cv2.medianBlur(img, kernel_size)
+            img = image_processor.apply_blur(img, kernel_size, blur_type)
+            logger.info(f"Применение размытия типа {blur_type} выполнено успешно")
+
+        elif action == "watershed":
+            blur_size = int(request.form.get("blur_size", 5))
+            min_distance = int(request.form.get("min_distance", 10))
+            img = image_processor.apply_watershed(img, blur_size, min_distance)
+            logger.info("Сегментация методом водораздела выполнена успешно")
+
+        elif action == "mean_shift":
+            spatial_radius = int(request.form.get("spatial_radius", 20))
+            color_radius = int(request.form.get("color_radius", 20))
+            max_level = int(request.form.get("max_level", 2))
+            img = image_processor.apply_mean_shift(img, spatial_radius, color_radius, max_level)
+            logger.info("Сегментация методом Mean Shift выполнена успешно")
+
+        elif action == "kmeans":
+            k = int(request.form.get("k", 3))
+            attempts = int(request.form.get("attempts", 10))
+            img = image_processor.apply_kmeans(img, k, attempts)
+            logger.info("Сегментация методом K-means выполнена успешно")
+
+        elif action == "dbscan":
+            eps = float(request.form.get("eps", 10))
+            min_samples = int(request.form.get("min_samples", 5))
+            img = image_processor.apply_dbscan(img, eps, min_samples)
+            logger.info("Сегментация методом DBSCAN выполнена успешно")
+
+        elif action == "active_contour":
+            alpha = float(request.form.get("alpha", 0.015))
+            beta = float(request.form.get("beta", 10))
+            gamma = float(request.form.get("gamma", 0.001))
+            img = image_processor.apply_active_contour(img, alpha, beta, gamma)
+            logger.info("Сегментация активным контуром выполнена успешно")
+
         elif action == "binarize":
             method = request.form.get("method", "global")
-            threshold = int(request.form.get("threshold") or 127)
-            block_size = int(request.form.get("block_size") or 11)
-            C = int(request.form.get("C") or 2)
-
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            threshold = request.form.get("threshold")
+            block_size = request.form.get("block_size")
+            C = request.form.get("C")
             
-            if method == "global":
-                _, img = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
-            elif method == "otsu":
-                _, img = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            elif method == "adaptive":
-                img = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                        cv2.THRESH_BINARY, block_size, C)
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            if threshold:
+                threshold = int(threshold)
+            if block_size:
+                block_size = int(block_size)
+            if C:
+                C = int(C)
+            
+            img = image_processor.apply_binarize(img, method, threshold, block_size, C)
+            logger.info(f"Бинаризация методом {method} выполнена успешно")
+
+        elif action == "threshold":
+            method = request.form.get("method", "binary")
+            threshold = int(request.form.get("threshold", 127))
+            max_value = int(request.form.get("max_value", 255))
+            img = image_processor.apply_threshold(img, method, threshold, max_value)
+            logger.info(f"Пороговая обработка методом {method} выполнена успешно")
 
         elif action == "sobel_edges":
-            
             direction = request.form.get("direction", "combined")
             ksize = int(request.form.get("ksize", 3))
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            if direction == "x":
-                edges = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=ksize)
-            elif direction == "y":
-                edges = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=ksize)
-            else:
-                sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=ksize)
-                sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=ksize)
-                edges = np.sqrt(sobelx**2 + sobely**2)
-            
-            edges = cv2.normalize(edges, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-            edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-            img = edges
-            # img = cv2.addWeighted(img, 0.8, edges, 0.2, 0)  
+            img = image_processor.apply_sobel_edges(img, direction, ksize)
+            logger.info(f"Выделение краев Собеля по направлению {direction} выполнено успешно")
 
         elif action == "canny_edges":
-            
             low_thresh = int(request.form.get("low_thresh", 100))
             high_thresh = int(request.form.get("high_thresh", 200))
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            edges = cv2.Canny(gray, low_thresh, high_thresh)
-            edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-            img = edges
-            # img = cv2.addWeighted(img, 0.8, edges, 0.2, 0) 
+            img = image_processor.apply_canny_edges(img, low_thresh, high_thresh)
+            logger.info("Выделение краев Канни выполнено успешно")
 
-        
+        # Сохраняем обработанное изображение
         cv2.imwrite(filepath, img)
-
-    except Exception as e:
-        flash(f"Ошибка обработки изображения: {str(e)}")
+        save_image_to_cache(filepath, img)
+        logger.info(f"Изображение успешно сохранено: {filepath}")
+        
         return redirect(url_for('editor', filename=filename))
 
-    return redirect(url_for('editor', filename=filename))
+    except Exception as e:
+        logger.error(f"Ошибка при обработке изображения: {str(e)}", exc_info=True)
+        flash(f"Ошибка при обработке изображения: {str(e)}")
+        return redirect(url_for('editor', filename=filename))
 
 @app.route('/editor/<filename>')
 def editor(filename):
@@ -293,27 +299,19 @@ def editor(filename):
 
 @app.route('/save/<filename>')
 def save_image(filename):
-    try:
-        # Путь к файлу
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        
-        # Возвращаем файл для скачивания
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
-    except Exception as e:
-        flash(f"Ошибка сохранения: {str(e)}")
-        return redirect(url_for('editor', filename=filename))
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/delete_file/<filename>')
 def delete_file(filename):
-    try:
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            return f"Файл {filename} удален", 200
-        else:
-            return f"Файл {filename} не найден", 404
-    except Exception as e:
-        return f"Ошибка при удалении файла: {e}", 500
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+        # Удаляем из кэша
+        with _cache_lock:
+            if filepath in _image_cache:
+                del _image_cache[filepath]
+        logger.info(f"Файл удален: {filepath}")
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(debug=True)

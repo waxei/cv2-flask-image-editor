@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор изображений</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .editor-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .image-preview {
+            max-width: 100%;
+            max-height: 500px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .toolbar button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #0d6efd;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .toolbar button:hover {
+            background-color: #0b5ed7;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-hint {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <h1 class="text-center mb-4">Редактор изображений</h1>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for message in messages %}
+                        <div class="alert alert-info">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <img src="{{ url_for('static', filename='uploads/' + filename) }}" class="image-preview" alt="Изображение">
+        
+        <div class="toolbar">
+            <button onclick="showForm('resize')">Изменить размер</button>
+            <button onclick="showForm('crop')">Обрезать</button>
+            <button onclick="showForm('rotate')">Повернуть</button>
+            <button onclick="showForm('brightness')">Яркость/Контраст</button>
+            <button onclick="showForm('blur')">Размытие</button>
+            <button onclick="showForm('sharpen')">Резкость</button>
+            <button onclick="showForm('grayscale')">Черно-белое</button>
+            <button onclick="showForm('invert')">Инверсия</button>
+            <button onclick="showForm('threshold')">Порог</button>
+            <button onclick="showForm('edge')">Границы</button>
+            <button onclick="showForm('contour')">Контуры</button>
+            <button onclick="showForm('watershed')">Водораздел</button>
+            <button onclick="showForm('clustering')">Кластеризация</button>
+            <a href="{{ url_for('save_image', filename=filename) }}" class="btn btn-success">Сохранить</a>
+            <a href="{{ url_for('index') }}" class="btn btn-danger">Назад</a>
+        </div>
+
+        <!-- Формы для редактирования -->
+        <div id="resize-form" class="form-group" style="display: none;">
+            <h3>Изменить размер</h3>
+            <form action="{{ url_for('edit_image', action='resize', filename=filename) }}" method="post">
+                <input type="number" name="width" placeholder="Ширина" required>
+                <input type="number" name="height" placeholder="Высота" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="crop-form" class="form-group" style="display: none;">
+            <h3>Обрезать изображение</h3>
+            <form action="{{ url_for('edit_image', action='crop', filename=filename) }}" method="post">
+                <input type="number" name="x" placeholder="X" required>
+                <input type="number" name="y" placeholder="Y" required>
+                <input type="number" name="width" placeholder="Ширина" required>
+                <input type="number" name="height" placeholder="Высота" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="rotate-form" class="form-group" style="display: none;">
+            <h3>Повернуть изображение</h3>
+            <form action="{{ url_for('edit_image', action='rotate', filename=filename) }}" method="post">
+                <input type="number" name="angle" placeholder="Угол (градусы)" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="brightness-form" class="form-group" style="display: none;">
+            <h3>Яркость и контраст</h3>
+            <form action="{{ url_for('edit_image', action='brightness', filename=filename) }}" method="post">
+                <input type="number" name="brightness" placeholder="Яркость (-100 до 100)" required>
+                <input type="number" name="contrast" placeholder="Контраст (0.1 до 3.0)" step="0.1" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="blur-form" class="form-group" style="display: none;">
+            <h3>Размытие</h3>
+            <form action="{{ url_for('edit_image', action='blur', filename=filename) }}" method="post">
+                <select name="type" required>
+                    <option value="average">Среднее</option>
+                    <option value="gaussian">Гауссово</option>
+                    <option value="median">Медианное</option>
+                </select>
+                <input type="number" name="kernel_size" placeholder="Размер ядра" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="sharpen-form" class="form-group" style="display: none;">
+            <h3>Резкость</h3>
+            <form action="{{ url_for('edit_image', action='sharpen', filename=filename) }}" method="post">
+                <input type="number" name="amount" placeholder="Сила эффекта (0.1 до 5.0)" step="0.1" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="grayscale-form" class="form-group" style="display: none;">
+            <h3>Черно-белое</h3>
+            <form action="{{ url_for('edit_image', action='grayscale', filename=filename) }}" method="post">
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="invert-form" class="form-group" style="display: none;">
+            <h3>Инверсия</h3>
+            <form action="{{ url_for('edit_image', action='invert', filename=filename) }}" method="post">
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="threshold-form" class="form-group" style="display: none;">
+            <h3>Порог</h3>
+            <form action="{{ url_for('edit_image', action='threshold', filename=filename) }}" method="post">
+                <input type="number" name="threshold" placeholder="Порог (0-255)" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="edge-form" class="form-group" style="display: none;">
+            <h3>Границы</h3>
+            <form action="{{ url_for('edit_image', action='edge', filename=filename) }}" method="post">
+                <select name="type" required>
+                    <option value="sobel">Собель</option>
+                    <option value="canny">Кэнни</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="contour-form" class="form-group" style="display: none;">
+            <h3>Контуры</h3>
+            <form action="{{ url_for('edit_image', action='contour', filename=filename) }}" method="post">
+                <input type="number" name="threshold" placeholder="Порог (0-255)" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="watershed-form" class="form-group" style="display: none;">
+            <h3>Водораздел</h3>
+            <form action="{{ url_for('edit_image', action='watershed', filename=filename) }}" method="post">
+                <input type="number" name="threshold" placeholder="Порог (0-255)" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+
+        <div id="clustering-form" class="form-group" style="display: none;">
+            <h3>Кластеризация</h3>
+            <form action="{{ url_for('edit_image', action='clustering', filename=filename) }}" method="post">
+                <select name="method" required>
+                    <option value="kmeans">K-means</option>
+                    <option value="mean_shift">Mean Shift</option>
+                </select>
+                <input type="number" name="n_clusters" placeholder="Количество кластеров" required>
+                <button type="submit" class="btn btn-primary">Применить</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showForm(formId) {
+            // Скрываем все формы
+            document.querySelectorAll('.form-group').forEach(form => {
+                form.style.display = 'none';
+            });
+            
+            // Показываем выбранную форму
+            document.getElementById(formId + '-form').style.display = 'block';
+        }
+    </script>
+</body>
+</html> 
