@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Clustering Processor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            background-color: #f8f9fa;
+            border-color: #0056b3;
+        }
+        .upload-area.dragover {
+            background-color: #e3f2fd;
+            border-color: #1976d2;
+        }
+        .audio-controls {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        .clustering-controls {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .result-area {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .method-form {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+        }
+        .method-form.active {
+            display: block;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        #audio-info {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-radius: 6px;
+        }
+        #result-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <h1 class="text-center my-4">
+                    <i class="bi bi-music-note-beamed text-primary"></i>
+                    Audio Clustering Processor
+                </h1>
+                
+                <!-- Upload Area -->
+                <div class="upload-area" id="upload-area">
+                    <i class="bi bi-cloud-upload display-1 text-primary"></i>
+                    <h4>Загрузите аудиофайл</h4>
+                    <p class="text-muted">Поддерживаются форматы: WAV, MP3, FLAC, OGG, M4A</p>
+                    <input type="file" id="audio-file" accept=".wav,.mp3,.flac,.ogg,.m4a" style="display: none;">
+                    <button class="btn btn-primary" onclick="document.getElementById('audio-file').click()">
+                        Выбрать файл
+                    </button>
+                </div>
+
+                <!-- Audio Info -->
+                <div id="audio-info">
+                    <h5><i class="bi bi-info-circle"></i> Информация об аудио</h5>
+                    <div id="audio-details"></div>
+                </div>
+
+                <!-- Audio Controls -->
+                <div class="audio-controls" id="audio-controls" style="display: none;">
+                    <h5><i class="bi bi-sliders"></i> Управление аудио</h5>
+                    <audio id="audio-player" controls style="width: 100%; margin-top: 10px;">
+                        Ваш браузер не поддерживает аудио элемент.
+                    </audio>
+                </div>
+
+                <!-- Clustering Controls -->
+                <div class="clustering-controls" id="clustering-controls" style="display: none;">
+                    <h5><i class="bi bi-diagram-3"></i> Методы кластеризации</h5>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-primary w-100 method-btn" data-method="kmeans">
+                                <i class="bi bi-grid"></i><br>K-means
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-success w-100 method-btn" data-method="mean_shift">
+                                <i class="bi bi-bullseye"></i><br>Mean Shift
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-info w-100 method-btn" data-method="dbscan">
+                                <i class="bi bi-scatter"></i><br>DBSCAN
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- K-means Form -->
+                    <div class="method-form" id="kmeans-form">
+                        <h6>Параметры K-means</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="kmeans-k">Количество кластеров (k):</label>
+                                <input type="number" id="kmeans-k" class="form-control" value="5" min="2" max="20">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="kmeans-attempts">Количество попыток:</label>
+                                <input type="number" id="kmeans-attempts" class="form-control" value="10" min="1" max="50">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary mt-3" onclick="applyClustering('kmeans')">
+                            Применить K-means
+                        </button>
+                    </div>
+
+                    <!-- Mean Shift Form -->
+                    <div class="method-form" id="mean_shift-form">
+                        <h6>Параметры Mean Shift</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="mean-shift-bandwidth">Ширина окна (bandwidth):</label>
+                                <input type="number" id="mean-shift-bandwidth" class="form-control" value="0.5" min="0.1" max="2.0" step="0.1">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="mean-shift-iterations">Макс. итераций:</label>
+                                <input type="number" id="mean-shift-iterations" class="form-control" value="300" min="50" max="1000">
+                            </div>
+                        </div>
+                        <button class="btn btn-success mt-3" onclick="applyClustering('mean_shift')">
+                            Применить Mean Shift
+                        </button>
+                    </div>
+
+                    <!-- DBSCAN Form -->
+                    <div class="method-form" id="dbscan-form">
+                        <h6>Параметры DBSCAN</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label for="dbscan-eps">Радиус поиска (eps):</label>
+                                <input type="number" id="dbscan-eps" class="form-control" value="0.5" min="0.1" max="2.0" step="0.1">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="dbscan-min-samples">Минимум точек:</label>
+                                <input type="number" id="dbscan-min-samples" class="form-control" value="10" min="3" max="50">
+                            </div>
+                        </div>
+                        <button class="btn btn-info mt-3" onclick="applyClustering('dbscan')">
+                            Применить DBSCAN
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading -->
+                <div class="loading" id="loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Обработка...</span>
+                    </div>
+                    <p class="mt-3">Выполняется кластеризация аудио...</p>
+                </div>
+
+                <!-- Results -->
+                <div class="result-area" id="result-area" style="display: none;">
+                    <h5><i class="bi bi-bar-chart"></i> Результат кластеризации</h5>
+                    <div class="text-center">
+                        <img id="result-image" src="" alt="Результат кластеризации">
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button class="btn btn-outline-primary" onclick="downloadClustered()">
+                            <i class="bi bi-download"></i> Скачать кластеризованные файлы
+                        </button>
+                        <button class="btn btn-outline-secondary ms-2" onclick="resetAll()">
+                            <i class="bi bi-arrow-clockwise"></i> Сбросить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentMethod = '';
+        let audioUploaded = false;
+
+        // Обработка загрузки файла
+        document.getElementById('audio-file').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                uploadAudio(file);
+            }
+        });
+
+        // Drag and drop
+        const uploadArea = document.getElementById('upload-area');
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                uploadAudio(file);
+            }
+        });
+
+        // Переключение методов
+        document.querySelectorAll('.method-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const method = this.dataset.method;
+                selectMethod(method);
+            });
+        });
+
+        function uploadAudio(file) {
+            const formData = new FormData();
+            formData.append('audio', file);
+
+            document.getElementById('loading').style.display = 'block';
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                
+                if (data.success) {
+                    audioUploaded = true;
+                    showAudioInfo(data);
+                    document.getElementById('audio-controls').style.display = 'block';
+                    document.getElementById('clustering-controls').style.display = 'block';
+                    
+                    // Устанавливаем источник аудио для проигрывателя
+                    const audioPlayer = document.getElementById('audio-player');
+                    audioPlayer.src = URL.createObjectURL(file);
+                } else {
+                    alert('Ошибка загрузки: ' + data.error);
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                alert('Ошибка загрузки: ' + error);
+            });
+        }
+
+        function showAudioInfo(data) {
+            const infoDiv = document.getElementById('audio-info');
+            const detailsDiv = document.getElementById('audio-details');
+            
+            detailsDiv.innerHTML = `
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Длительность:</strong><br>
+                        ${data.duration.toFixed(2)} сек
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Частота дискретизации:</strong><br>
+                        ${data.sample_rate} Гц
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Файл:</strong><br>
+                        ${data.filename}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Статус:</strong><br>
+                        <span class="text-success">Загружен</span>
+                    </div>
+                </div>
+            `;
+            
+            infoDiv.style.display = 'block';
+        }
+
+        function selectMethod(method) {
+            currentMethod = method;
+            
+            // Скрываем все формы
+            document.querySelectorAll('.method-form').forEach(form => {
+                form.classList.remove('active');
+            });
+            
+            // Убираем активное состояние с кнопок
+            document.querySelectorAll('.method-btn').forEach(btn => {
+                btn.classList.remove('btn-primary', 'btn-success', 'btn-info');
+                btn.classList.add('btn-outline-primary');
+            });
+            
+            // Показываем выбранную форму
+            const form = document.getElementById(method + '-form');
+            if (form) {
+                form.classList.add('active');
+            }
+            
+            // Активируем выбранную кнопку
+            const btn = document.querySelector(`[data-method="${method}"]`);
+            btn.classList.remove('btn-outline-primary');
+            if (method === 'kmeans') {
+                btn.classList.add('btn-primary');
+            } else if (method === 'mean_shift') {
+                btn.classList.add('btn-success');
+            } else if (method === 'dbscan') {
+                btn.classList.add('btn-info');
+            }
+        }
+
+        function applyClustering(method) {
+            if (!audioUploaded) {
+                alert('Сначала загрузите аудиофайл');
+                return;
+            }
+
+            const formData = new FormData();
+            
+            if (method === 'kmeans') {
+                formData.append('k', document.getElementById('kmeans-k').value);
+                formData.append('attempts', document.getElementById('kmeans-attempts').value);
+            } else if (method === 'mean_shift') {
+                formData.append('bandwidth', document.getElementById('mean-shift-bandwidth').value);
+                formData.append('max_iterations', document.getElementById('mean-shift-iterations').value);
+            } else if (method === 'dbscan') {
+                formData.append('eps', document.getElementById('dbscan-eps').value);
+                formData.append('min_samples', document.getElementById('dbscan-min-samples').value);
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result-area').style.display = 'none';
+
+            fetch(`/${method}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.error);
+                    });
+                }
+            })
+            .then(blob => {
+                document.getElementById('loading').style.display = 'none';
+                
+                const imageUrl = URL.createObjectURL(blob);
+                document.getElementById('result-image').src = imageUrl;
+                document.getElementById('result-area').style.display = 'block';
+                
+                // Прокручиваем к результату
+                document.getElementById('result-area').scrollIntoView({ behavior: 'smooth' });
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                alert('Ошибка кластеризации: ' + error.message);
+            });
+        }
+
+        function downloadClustered() {
+            if (!currentMethod) {
+                alert('Сначала выполните кластеризацию');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('method', currentMethod);
+            
+            if (currentMethod === 'kmeans') {
+                formData.append('k', document.getElementById('kmeans-k').value);
+            } else if (currentMethod === 'mean_shift') {
+                formData.append('bandwidth', document.getElementById('mean-shift-bandwidth').value);
+            } else if (currentMethod === 'dbscan') {
+                formData.append('eps', document.getElementById('dbscan-eps').value);
+                formData.append('min_samples', document.getElementById('dbscan-min-samples').value);
+            }
+
+            fetch('/download_clustered', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Создано ${data.count} кластеризованных файлов. Они будут скачаны автоматически.`);
+                    
+                    // Скачиваем каждый файл
+                    data.files.forEach(filename => {
+                        const link = document.createElement('a');
+                        link.href = `/download_file/${filename}`;
+                        link.download = filename;
+                        link.click();
+                    });
+                } else {
+                    alert('Ошибка при создании файлов: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка: ' + error);
+            });
+        }
+
+        function resetAll() {
+            audioUploaded = false;
+            currentMethod = '';
+            
+            document.getElementById('audio-info').style.display = 'none';
+            document.getElementById('audio-controls').style.display = 'none';
+            document.getElementById('clustering-controls').style.display = 'none';
+            document.getElementById('result-area').style.display = 'none';
+            document.getElementById('audio-file').value = '';
+            
+            document.querySelectorAll('.method-form').forEach(form => {
+                form.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.method-btn').forEach(btn => {
+                btn.classList.remove('btn-primary', 'btn-success', 'btn-info');
+                btn.classList.add('btn-outline-primary');
+            });
+        }
+    </script>
+</body>
+</html>

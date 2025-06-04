@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const actionButtons = document.querySelectorAll('.toolbar button[data-action]');
     
     // Получаем все формы
-    const forms = document.querySelectorAll('.form-group');
+    const forms = document.querySelectorAll('.form-group, .clustering-method');
     
     // Получаем оверлей загрузки
     const loadingOverlay = document.getElementById('loadingOverlay');
@@ -48,15 +48,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: formData
             })
             .then(response => {
+                // Скрываем индикатор загрузки при любом ответе
+                loadingOverlay.style.display = 'none';
                 if (response.redirected) {
-                    // Скрываем индикатор загрузки перед перенаправлением
-                    loadingOverlay.style.display = 'none';
                     window.location.href = response.url;
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                // Скрываем индикатор загрузки в случае ошибки
                 loadingOverlay.style.display = 'none';
                 alert('Произошла ошибка при обработке изображения');
             });
@@ -88,4 +87,4 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById(`${selectedMethod}-form`).style.display = 'block';
         }
     });
-}); 
+});

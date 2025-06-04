@@ -5,7 +5,7 @@ from functools import lru_cache
 import logging
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN, KMeans  # add KMeans import
 from sklearn.neighbors import NearestCentroid
 from skimage.segmentation import active_contour
 import threading
@@ -221,87 +221,58 @@ class ImageProcessor:
         return img
 
     def apply_mean_shift(self, img, spatial_radius=10, color_radius=10, max_level=3):
+        """Выполняет сегментацию изображения методом Mean Shift (huinya logic)"""
         try:
-            img_processed = self._preprocess_image(img)
-            
-            result = cv2.pyrMeanShiftFiltering(
-                (img_processed * 255).astype(np.uint8),
-                spatial_radius,
-                color_radius,
-                maxLevel=max_level
-            )
-            
-            if img.shape[:2] != result.shape[:2]:
-                result = cv2.resize(result, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
-            
-            return result
-            
+            # Уменьшаем изображение для ускорения обработки
+            small_img = cv2.resize(img, (400, 400), interpolation=cv2.INTER_AREA)
+            img_lab = cv2.cvtColor(small_img, cv2.COLOR_BGR2LAB)
+            segmented = cv2.pyrMeanShiftFiltering(img_lab, spatial_radius, color_radius, max_level)
+            segmented = cv2.cvtColor(segmented, cv2.COLOR_LAB2BGR)
+            # Возвращаем к исходному размеру
+            return cv2.resize(segmented, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_CUBIC)
         except Exception as e:
-            logger.error(f"Ошибка при применении Mean Shift: {str(e)}", exc_info=True)
-            raise
+            logger.error(f"Mean Shift error: {str(e)}")
+            return img
 
     def apply_kmeans(self, img, k=5, attempts=5):
+        """Выполняет сегментацию изображения методом K-Means (huinya logic)"""
         try:
-            img_processed = self._preprocess_image(img)
-            
-            points = img_processed.reshape(-1, 3)
-            points_for_kmeans = points.astype(np.float32)
-            
-            criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.1)
-            _, labels, centers = cv2.kmeans(
-                points_for_kmeans,
-                k,
-                None,
-                criteria,
-                attempts,
-                cv2.KMEANS_RANDOM_CENTERS
-            )
-            
-            segmented_pixels = centers[labels.flatten()]
-            result = segmented_pixels.reshape(img_processed.shape)
-            
-            if img.shape[:2] != result.shape[:2]:
-                result = cv2.resize(result, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
-            
-            return (result * 255).astype(np.uint8)
-            
+            # Изменение размера для ускорения обработки
+            small_img = cv2.resize(img, (300, 300), interpolation=cv2.INTER_AREA)
+            pixels = small_img.reshape(-1, 3).astype(np.float32)
+            kmeans = KMeans(n_clusters=k, random_state=42)
+            labels = kmeans.fit_predict(pixels)
+            centers = kmeans.cluster_centers_
+            segmented = centers[labels].reshape(small_img.shape)
+            segmented = cv2.resize(segmented.astype(np.uint8), (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
+            return segmented
         except Exception as e:
-            logger.error(f"Ошибка при применении K-means: {str(e)}", exc_info=True)
-            raise
+            logger.error(f"K-Means error: {str(e)}")
+            return img
 
-    def apply_dbscan(self, img, eps=5.0, min_samples=10):
-        try:
-            img_processed = self._preprocess_image(img)
-            
-            points = img_processed.reshape(-1, 3)
-            points_to_cluster = points 
-            
-            dbscan = DBSCAN(eps=eps, min_samples=min_samples, n_jobs=-1)
-            labels = dbscan.fit_predict(points_to_cluster)
-            
-            result_flat = np.zeros_like(points_to_cluster)
-            unique_labels = np.unique(labels)
-            
-            self._color_cache.clear()
-
-            for label_val in unique_labels:
-                current_mask_1d = (labels == label_val) 
-                if label_val == -1:
-                    pass 
-                else:
-                    cached_color_uint8 = self._get_cached_color(label_val)
-                    result_flat[current_mask_1d] = cached_color_uint8.astype(np.float32) / 255.0
-            
-            result = result_flat.reshape(img_processed.shape)
-            
-            if img.shape[:2] != result.shape[:2]:
-                result = cv2.resize(result, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
-            
-            return (result * 255).astype(np.uint8)
-        
-        except Exception as e:
-            logger.error(f"Ошибка при применении DBSCAN: {str(e)}", exc_info=True)
-            raise
+    def apply_dbscan(self, img, eps=0.5, min_samples=10):
+        """Выполняет сегментацию изображения методом DBSCAN с масштабированием признаков"""
+        # Уменьшаем изображение для ускорения
+        small_img = cv2.resize(img, (100, 100), interpolation=cv2.INTER_AREA)
+        # Подготавливаем признаки
+        pixels = small_img.reshape(-1, 3).astype(np.float32)
+        scaler = StandardScaler()
+        features = scaler.fit_transform(pixels)
+        # Кластеризация DBSCAN
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+        labels = dbscan.fit_predict(features)
+        unique_labels = np.unique(labels)
+        # Присваиваем цвета
+        colors = {label: (np.array([0,0,0]) if label == -1 else np.random.randint(0,255,3)) for label in unique_labels}
+        # Рисуем карту кластеров
+        h, w = small_img.shape[:2]
+        colored = np.zeros((h, w, 3), dtype=np.uint8)
+        label_map = labels.reshape(h, w)
+        for label, color in colors.items():
+            mask = (label_map == label)
+            colored[mask] = color
+        # Возвращаем к исходному размеру
+        return cv2.resize(colored, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
 
     def _get_cached_color(self, label):
         with self._cache_lock:
